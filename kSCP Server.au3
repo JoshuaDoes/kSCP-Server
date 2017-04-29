@@ -1,22 +1,34 @@
+#Region ;**** Directives created by AutoIt3Wrapper_GUI ****
+#AutoIt3Wrapper_Version=Beta
+#AutoIt3Wrapper_Outfile=kSCP Server.exe
+#AutoIt3Wrapper_UseX64=n
+#AutoIt3Wrapper_Change2CUI=y
+#AutoIt3Wrapper_Res_Comment=kSCP Chat Server
+#AutoIt3Wrapper_Res_Description=kSCP Chat Server
+#AutoIt3Wrapper_Res_Fileversion=0.0.0.1
+#AutoIt3Wrapper_Res_LegalCopyright=JoshuaDoes © 2017
+#EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 #include <Array.au3>
+#include <Crypt.au3>
 
 #include <TCP.au3> ;Ensure this is Kip's TCP library available at (https://www.autoitscript.com/forum/topic/74325-tcp-udf-event-driven/)
 
-Global Const $USER_FLAG_ONLINE = 1
-Global Const $USER_FLAG_MUTE = 2
-Global Const $USER_FLAG_ADMIN = 4
-Global Const $USER_FLAG_ROOT = 8
-Global Const $USER_FLAG_GHOST = 16
-Global Const $USER_FLAG_AWAY = 32
+Global Const $USER_FLAG_ONLINE = 2 ^ 0
+Global Const $USER_FLAG_MUTE = 2 ^ 1
+Global Const $USER_FLAG_MODERATOR = 2 ^ 2
+Global Const $USER_FLAG_ADMIN = 2 ^ 3
+Global Const $USER_FLAG_ROOT = 2 ^ 4
+Global Const $USER_FLAG_GHOST = 2 ^ 5
+Global Const $USER_FLAG_AWAY = 2 ^ 6
 
 ConsoleWrite("Preparing settings map..." & @CRLF)
 Global $mSettings[]
 $mSettings["Server IP"] = "0.0.0.0" ;The IP address to host the server on
 $mSettings["Server Port"] = 100 ;The port number to host the server on
-$mSettings["Server Name"] = "kSCP Server"
-$mSettings["Server MoTD"] = "Welcome to " & $mSettings["Server Name"] & ", built using revision 9 of kSCP (Simple Chat Protocol) which can be found at (http://kchat.kealper.com/sourcecode/Simple%20Chat%20Protocol%20Documentation%20and%20Specification.txt)."
-$mSettings["Users Maximum"] = 100 ;Maximum allowed connections at one time
-$mSettings["Auth Password"] = ""
+$mSettings["Server Name"] = "JoshuaDoes kSCP Test Chat"
+$mSettings["Server MoTD"] = "Welcome to " & $mSettings["Server Name"] & ", built using a base specification of kSCP (Simple Chat Protocol) Revision 9, which can be found at (http://kchat.kealper.com/sourcecode/Simple%20Chat%20Protocol%20Documentation%20and%20Specification.txt)."
+$mSettings["Users Maximum"] = 40 ;Maximum connections allowed at one time
+$mSettings["Auth Password"] = "changeme"
 
 Global $mUsers[] ;Create a map for all users
 
@@ -28,6 +40,7 @@ EndIf
 _TCP_RegisterEvent($hSocket, $TCP_NEWCLIENT, "AcceptClient")
 _TCP_RegisterEvent($hSocket, $TCP_DISCONNECT, "LostClient")
 _TCP_RegisterEvent($hSocket, $TCP_RECEIVE, "NewPacket")
+ConsoleWrite($mSettings["Server Name"] & " is now ready on " & $mSettings["Server IP"] & ":" & $mSettings["Server Port"] & "." & @CRLF)
 
 While 1
 	Sleep(0)
@@ -162,13 +175,13 @@ Func NewPacket($hClient, $sData, $iError)
 				TellMsg($sTemp, "Message of the Day", $mSettings["Server MoTD"])
 			Case "AUTH"
 				If $aPacketData[0] > 1 Then
-					If $aPacketData[2] = $mSettings["Auth Password"] Then
+					If $aPacketData[2] = String(_Crypt_HashData($mSettings["Auth Password"], $CALG_MD5)) Then
 						Local $sTemp = $mUsers[$hClient]
 						Local $aTemp = $mUsers[$sTemp]
-						$aTemp[1] = $aTemp[1] + $USER_FLAG_ROOT
-;						$aTemp[1] = BitAND($aTemp[1], $USER_FLAG_ROOT)
+;						$aTemp[1] = $aTemp[1] + $USER_FLAG_ROOT
+						$aTemp[1] = BitOR($aTemp[1], $USER_FLAG_ROOT)
+						$mUsers[$sTemp] = $aTemp
 						TellMsg($sTemp, "Announcement", "You are now logged in as root.")
-						TellMsg($sTemp, "Debug", $aTemp[1])
 					Else
 						Local $sTemp = $mUsers[$hClient]
 						Kill($sTemp, "Incorrect root password.")
@@ -179,14 +192,16 @@ Func NewPacket($hClient, $sData, $iError)
 					If BitAND($aTemp[1], $USER_FLAG_ROOT) Then
 						$bUserFlags = $USER_FLAG_ONLINE
 						If BitAND($aTemp[1], $USER_FLAG_MUTE) Then
-							$bUserFlags = $bUserFlags + $USER_FLAG_MUTE
+							$bUserFlags = BitOR($bUserFlags, $USER_FLAG_MUTE)
 						EndIf
 						If BitAND($aTemp[1], $USER_FLAG_GHOST) Then
-							$bUserFlags = $bUserFlags + $USER_FLAG_GHOST
+							$bUserFlags = BitOR($bUserFlags, $USER_FLAG_GHOST)
 						EndIf
 						If BitAND($aTemp[1], $USER_FLAG_AWAY) Then
-							$bUserFlags = $bUserFlags + $USER_FLAG_AWAY
+							$bUserFlags = BitOR($bUserFlags, $USER_FLAG_AWAY)
 						EndIf
+						$aTemp[1] = $bUserFlags
+						$mUsers[$sTemp] = $aTemp
 						TellMsg($sTemp, "Announcement", "You are no longer logged in as root.")
 					Else
 						TellMsg($sTemp, "Announcement", "You must specify a password in order to log in as root.")
@@ -297,3 +312,12 @@ Func Kill($sUsername, $sMsg)
 		Broadcast("Announcement", $sUsername & " has been kicked from the server.")
 	EndIf
 EndFunc
+
+#Region ;Functions not yet used
+Func UserModerator($sUsername)
+	;Check to see if a user can log in as moderator
+EndFunc
+Func UserRoot($sUsername)
+	;Check to see if a user can log in as root
+EndFunc
+#EndRegion
